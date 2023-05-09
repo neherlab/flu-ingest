@@ -1,0 +1,83 @@
+#!/usr/bin/env python3
+"""
+Generate URL to download all Monkeypox sequences and their curated metadata
+from GenBank via NCBI Virus.
+
+The URL this program builds is based on the URL for SARS-CoV-2 constructed with
+
+    https://github.com/nextstrain/ncov-ingest/blob/2a5f255329ee5bdf0cabc8b8827a700c92becbe4/bin/genbank-url
+
+and observing the network activity at
+
+    https://www.ncbi.nlm.nih.gov/labs/virus/vssi/#/virus?SeqType_s=Nucleotide&VirusLineage_ss=Monkeypox%20virus,%20taxid:10244
+"""
+from urllib.parse import urlencode
+import argparse
+
+def parse_args():
+    parser = argparse.ArgumentParser(
+        description="generate download ur;",
+    )
+    parser.add_argument("--lineage", default='B')
+    parser.add_argument("--segment", default=4)
+    return parser.parse_args()
+
+args = parse_args()
+
+taxonIDs = {'A-h3n2': 11320, 'A-h1n1': 114727, 'B': 11520}
+
+segments = ['PB2', 'PB1', 'PA', 'HA', 'NP', 'NA', 'MP', 'NS']
+
+endpoint = "https://www.ncbi.nlm.nih.gov/genomes/VirusVariation/vvsearch2/"
+params = {
+    # Search criteria
+    'fq': [
+        '{!tag=SeqType_s}SeqType_s:("Nucleotide")', # Nucleotide sequences (as opposed to protein)
+        f'Segment_s:({segments.index(args.segment)+1})',
+        f'VirusLineageId_ss:({taxonIDs[args.lineage]})',                # NCBI Taxon id for A/H3N2
+    ],
+
+    # Unclear, but seems necessary.
+    'q': '*:*',
+
+    # Response format
+    'cmd': 'download',
+    'dlfmt': 'csv',
+    'fl': ','.join(
+        ':'.join(names) for names in [
+            # Pairs of (output column name, source data field).
+            ('genbank_accession',       'id'),
+            ('genbank_accession_rev',   'AccVer_s'),
+            ('database',                'SourceDB_s'),
+            ('EPI_ISL_ID',                  'IsolateParsed_s'),
+            ('strain',                  'Definition_s'),
+            ('region',                  'Region_s'),
+            ('segment',                 'Segment_s'),
+            ('location',                'CountryFull_s'),
+            ('collected',               'CollectionDate_s'),
+            ('submitted',               'CreateDate_dt'),
+            ('length',                  'SLen_i'),
+            ('host',                    'Host_s'),
+            ('isolation_source',        'Isolation_csv'),
+            ('bioproject_accession',    'BioProject_s'),
+            ('biosample_accession',     'BioSample_s'),
+            ('sra_accession',           'SRALink_csv'),
+            ('title',                   'Definition_s'),
+            ('authors',                 'Authors_csv'),
+            ('submitting_lab',          'SubmitterAffilFull_s'),
+            ('publications',            'PubMed_csv'),
+            ('sequence',                'Nucleotide_seq'),
+        ]
+    ),
+
+    # Stable sort with GenBank accessions.
+    # Columns are source data fields, not our output columns.
+    'sort': 'SourceDB_s desc, CollectionDate_s asc, id asc',
+
+    # This isn't Entrez, but include the same email parameter it requires just
+    # to be nice.
+    'email': 'hello@nextstrain.org',
+}
+query = urlencode(params, doseq = True, encoding = "utf-8")
+
+print(f"{endpoint}?{query}")
